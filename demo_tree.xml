@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BehaviorTree>
+    <Root>
+        <Selector name="Root">
+            
+            <Condition name="Object Detected">
+                <BlackboardEntry key="object_detected" value="true"/>
+            </Condition>
+
+            <Action name="Rotate 360 Degrees">
+                <ActionFunction>rotate_robot</ActionFunction>
+            </Action>
+        </Selector>
+    </Root>
+</BehaviorTree>
