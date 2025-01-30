@@ -1,10 +1,11 @@
+<?xml version="1.0"?>
 <root>
   <Sequence name="MainSequence">
-    <Action name="ApproachTable" />
-    <Action name="WaitForSeconds" seconds="20" />
-    <Action name="SayMessage" message="Enjoy your meal" />
-    <Action name="DisplaySmiley" />
-    <Action name="Turn360" />
-    <Action name="ReturnToStart" />
+    <ApproachTable />
+    <WaitForSeconds seconds="20" />
+    <SayMessage message="Enjoy your meal!" />
+    <DisplaySmiley />
+    <Turn360 />
+    <ReturnToStart />
   </Sequence>
 </root>

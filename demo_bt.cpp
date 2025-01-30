@@ -1,8 +1,10 @@
 #include <iostream>
 #include <chrono>
+#include <functional>
 #include <thread>
-#include "behaviortree_cpp/action_node.h"
-#include "behaviortree_cpp/bt_factory.h"
+#include "rclcpp/rclcpp.hpp"
+#include "behaviortree_cpp_v3/action_node.h"
+#include "behaviortree_cpp_v3/bt_factory.h"
 
 using namespace std::chrono_literals;
 
@@ -16,7 +18,7 @@ public:
   BT::NodeStatus tick() override
   {
     std::cout << "Approaching the table: " << this->name() << std::endl;
-    std::this_thread::sleep_for(5s); // Approaching the table
+    std::this_thread::sleep_for(5s); // Simulating approaching the table
     return BT::NodeStatus::SUCCESS;
   }
 };
@@ -24,44 +26,47 @@ public:
 class WaitForSeconds : public BT::SyncActionNode
 {
 public:
-  explicit WaitForSeconds(const std::string &name, int seconds) : BT::SyncActionNode(name, {}), _seconds(seconds) {}
+    // Constructor remains the same
+    WaitForSeconds(const std::string& name) : BT::SyncActionNode(name, {}) {}
 
-  BT::NodeStatus tick() override
-  {
-    std::cout << "Waiting for " << _seconds << " seconds..." << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(_seconds));
-    return BT::NodeStatus::SUCCESS;
-  }
+    virtual BT::NodeStatus tick() override
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(seconds_));
+        return BT::NodeStatus::SUCCESS;
+    }
 
 private:
-  int _seconds;
+    int seconds_ = 10;  // Default to 10 seconds
 };
+
 
 class SayMessage : public BT::SyncActionNode
 {
 public:
-  explicit SayMessage(const std::string &name, const std::string &message) : BT::SyncActionNode(name, {}), _message(message) {}
+    // Constructor remains the same, no input parameters
+    SayMessage(const std::string& name) : BT::SyncActionNode(name, {}) {}
 
-  BT::NodeStatus tick() override
-  {
-    std::cout << "Speaker says: " << _message << std::endl;
-    return BT::NodeStatus::SUCCESS;
-  }
+    virtual BT::NodeStatus tick() override
+    {
+        std::cout << message_ << std::endl;
+        return BT::NodeStatus::SUCCESS;
+    }
 
 private:
-  std::string _message;
+    std::string message_ = "Enjoy your meal";  // Default message
 };
 
 class DisplaySmiley : public BT::SyncActionNode
 {
 public:
-  explicit DisplaySmiley(const std::string &name) : BT::SyncActionNode(name, {}) {}
+    // Constructor remains the same, no input parameters
+    DisplaySmiley(const std::string& name) : BT::SyncActionNode(name, {}) {}
 
-  BT::NodeStatus tick() override
-  {
-    std::cout << "Displaying: 😊" << std::endl; // Simulate displaying a smiley
-    return BT::NodeStatus::SUCCESS;
-  }
+    BT::NodeStatus tick() override
+    {
+        std::cout << "Displaying: 😊" << std::endl; // Simulate displaying a smiley
+        return BT::NodeStatus::SUCCESS;
+    }
 };
 
 class Turn360 : public BT::SyncActionNode
@@ -90,23 +95,61 @@ public:
   }
 };
 
-int main()
+class BehaviorTreeNode : public rclcpp::Node
 {
-  BT::BehaviorTreeFactory factory;
+public:
+    // Constructor with NodeOptions
+    BehaviorTreeNode(const std::string& node_name, const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
+        : Node(node_name, options)
+    {
+        BT::BehaviorTreeFactory factory;
 
-  // Register the custom actions
-  factory.registerNodeType<ApproachObject>("ApproachTable");
-  factory.registerNodeType<WaitForSeconds>("WaitForSeconds");
-  factory.registerNodeType<SayMessage>("SayMessage");
-  factory.registerNodeType<DisplaySmiley>("DisplaySmiley");
-  factory.registerNodeType<Turn360>("Turn360");
-  factory.registerNodeType<ReturnToStart>("ReturnToStart");
+        // Register the custom actions
+        factory.registerNodeType<ApproachObject>("ApproachTable");
+        factory.registerNodeType<WaitForSeconds>("WaitForSeconds");
+        factory.registerNodeType<SayMessage>("SayMessage");
+        factory.registerNodeType<DisplaySmiley>("DisplaySmiley");
+        factory.registerNodeType<Turn360>("Turn360");
+        factory.registerNodeType<ReturnToStart>("ReturnToStart");
 
-  // Create Tree
-  auto tree = factory.createTreeFromFile("./../bt_tree.xml");
+        // Create Tree from XML file provided as parameter
+        tree_ = factory.createTreeFromFile(this->get_parameter("bt_tree_file").as_string());
 
-  // Execute the tree
-  tree.tickWhileRunning();
+        // Timer to regularly call the behavior tree's tickRoot method
+        timer_ = this->create_wall_timer(
+          100ms, std::bind(&BehaviorTreeNode::tickTree, this));
+    }
 
-  return 0;
+private:
+    void tickTree()
+    {
+        tree_.tickRoot();
+    }
+
+    BT::Tree tree_;
+    rclcpp::TimerBase::SharedPtr timer_;
+};
+
+int main(int argc, char **argv)
+{
+    rclcpp::init(argc, argv);
+
+    if (argc < 2)
+    {
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Usage: behavior_tree_node <bt_tree_file>");
+        return 1;
+    }
+
+    // Initialize the ROS 2 node and load the behavior tree file as a parameter
+    rclcpp::NodeOptions options;
+    options.parameter_overrides({
+        {"bt_tree_file", argv[1]}
+    });
+
+    // Create and spin the node
+    auto node = std::make_shared<BehaviorTreeNode>("behavior_tree_node", options);
+    rclcpp::spin(node);
+
+    rclcpp::shutdown();
+    return 0;
 }
